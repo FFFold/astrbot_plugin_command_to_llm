@@ -151,11 +151,16 @@
   - `llm_function`：函数名（例如 `list_reminders`）
   - `description`：给 AI 的用途描述
   - `arg_description`：该映射专属参数说明（告诉 AI args 应如何填写）
+  - `expected_message_count`：该指令预期返回条数；大于 0 时，达到条数立即停止捕获
+  - `post_capture_quiet_sec`：最后一条消息后等待多久没有新消息就结束捕获
+  - `capture_timeout_sec`：该指令捕获流程的最长总时长
   - `group`：分组标签
   - `aliases`：预留别名字段（后续扩展）
 - `allow_duplicate_llm_function`：是否允许多个指令复用同一函数名
 
 ### 3) 执行行为（execution_config）
+- `expected_message_count`：全局默认预期返回条数；大于 0 时，达到条数立即停止捕获
+- `post_capture_quiet_sec`：全局默认末条静默超时；设为 `0` 表示不启用该条件
 - `capture_timeout_sec`：捕获被触发指令响应的超时秒数
 - `forward_interval_sec`：多条消息转发间隔
 - `response_mode`：
@@ -164,6 +169,13 @@
   - `text_only`：只返回文本
  
 > 如果你的目标是“只执行，不要 AI 再说一遍”，请保持 `forward_only`。
+
+捕获停止条件说明：
+- 运行时会同时检查 `expected_message_count`、`post_capture_quiet_sec`、`capture_timeout_sec`
+- 三者按 OR 关系生效，任意一个条件满足就停止捕获
+- 单映射中的上述三个字段设为 `0` 时，会继承全局 `execution_config` 的对应值
+- 如果返回条数不确定，建议不要配置 `expected_message_count`
+- 如果全局 `post_capture_quiet_sec = 0`，则默认只依赖预期条数和总超时，不会因为静默时间提前结束
 
 ### 4) 工具参数说明（tool_config）
 - `tool_description`：全局工具描述（统一告诉 LLM 这个插件在做什么）

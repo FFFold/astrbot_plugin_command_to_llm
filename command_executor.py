@@ -1,5 +1,5 @@
-import asyncio
 from typing import List, Tuple
+
 from astrbot.api import logger
 from astrbot.core.message.message_event_result import MessageChain
 from .command_trigger import CommandTrigger
@@ -55,11 +55,13 @@ class CommandExecutor:
         creator_name: str = None,
         capture_timeout: float = 20.0,
         wait_interval: float = 0.1,
+        expected_message_count: int = 0,
+        post_capture_quiet_sec: float = 0.0,
     ) -> Tuple[bool, List[MessageChain]]:
         """执行指令并捕获响应（可配置超时）"""
         try:
             logger.info(
-                f"开始执行指令(可配置): {command}, capture_timeout={capture_timeout}, wait_interval={wait_interval}"
+                f"开始执行指令(可配置): {command}, capture_timeout={capture_timeout}, wait_interval={wait_interval}, expected_message_count={expected_message_count}, post_capture_quiet_sec={post_capture_quiet_sec}"
             )
 
             (
@@ -72,6 +74,8 @@ class CommandExecutor:
                 creator_name,
                 max_wait_time=capture_timeout,
                 wait_interval=wait_interval,
+                expected_message_count=expected_message_count,
+                post_capture_quiet_sec=post_capture_quiet_sec,
             )
 
             if success:
@@ -120,11 +124,13 @@ class CommandExecutor:
         capture_timeout: float = 20.0,
         wait_interval: float = 0.1,
         forward_interval: float = 0.5,
+        expected_message_count: int = 0,
+        post_capture_quiet_sec: float = 0.0,
     ):
         """执行指令并转发结果（可配置超时与间隔）"""
         try:
             logger.info(
-                f"开始执行并转发指令(可配置): {command}, capture_timeout={capture_timeout}, forward_interval={forward_interval}"
+                f"开始执行并转发指令(可配置): {command}, capture_timeout={capture_timeout}, forward_interval={forward_interval}, expected_message_count={expected_message_count}, post_capture_quiet_sec={post_capture_quiet_sec}"
             )
 
             await self.command_trigger.trigger_and_forward_command(
@@ -135,6 +141,8 @@ class CommandExecutor:
                 max_wait_time=capture_timeout,
                 wait_interval=wait_interval,
                 forward_interval=forward_interval,
+                expected_message_count=expected_message_count,
+                post_capture_quiet_sec=post_capture_quiet_sec,
             )
         except Exception as e:
             logger.error(f"执行并转发指令失败(可配置): {str(e)}")
