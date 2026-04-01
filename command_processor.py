@@ -3,8 +3,8 @@ from typing import List
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Plain
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.api.message_components import Reply
 
 from .command_executor import CommandExecutor
 
@@ -15,6 +15,21 @@ class CommandProcessor:
         self.context = star_instance.context
         self.data_manager = star_instance.data_manager
         self.command_executor = CommandExecutor(self.context)
+
+    def _prepare_captured_message_for_forward(self, captured_msg):
+        """主动发送时剥离不适合跨会话重发的组件，如 Reply。"""
+        if not hasattr(captured_msg, "chain") or not captured_msg.chain:
+            return captured_msg
+
+        filtered_chain = [
+            component
+            for component in captured_msg.chain
+            if not isinstance(component, Reply)
+        ]
+        if len(filtered_chain) == len(captured_msg.chain):
+            return captured_msg
+
+        return MessageChain(chain=filtered_chain)
 
     def _resolve_wake_prefixes(self, event: AstrMessageEvent) -> List[str]:
         """解析当前会话可用的主框架唤醒前缀列表。"""
@@ -92,6 +107,28 @@ class CommandProcessor:
             forward_interval = execution_options["forward_interval_sec"]
             response_mode = execution_options["response_mode"]
 
+            last_forward_time = None
+            forward_lock = asyncio.Lock()
+
+            async def handle_captured_message(message_chain):
+                nonlocal last_forward_time
+
+                if response_mode not in {"forward_and_text", "forward_only"}:
+                    return
+
+                async with forward_lock:
+                    now = asyncio.get_running_loop().time()
+                    if last_forward_time is not None and forward_interval > 0:
+                        elapsed = now - last_forward_time
+                        if elapsed < forward_interval:
+                            await asyncio.sleep(forward_interval - elapsed)
+
+                    await self.context.send_message(
+                        event.unified_msg_origin,
+                        self._prepare_captured_message_for_forward(message_chain),
+                    )
+                    last_forward_time = asyncio.get_running_loop().time()
+
             # 使用指令执行器执行指令
             (
                 success,
@@ -105,41 +142,14 @@ class CommandProcessor:
                 wait_interval=wait_interval,
                 expected_message_count=execution_options["expected_message_count"],
                 post_capture_quiet_sec=execution_options["post_capture_quiet_sec"],
+                on_message_captured=handle_captured_message,
             )
 
             if success and captured_messages:
                 if response_mode in {"forward_and_text", "forward_only"}:
                     logger.info(
-                        f"[command_processor] 开始主动发送转发消息，mode={response_mode}"
+                        f"[command_processor] 已在捕获阶段即时转发消息，mode={response_mode}"
                     )
-
-                    for i, captured_msg in enumerate(captured_messages):
-                        if captured_msg is not None:
-                            logger.info(
-                                f"[command_processor] 发送第 {i + 1} 条转发消息"
-                            )
-
-                            forward_msg = MessageChain()
-                            forward_msg.chain.append(
-                                Plain(f"[指令执行] {command_text}\n")
-                            )
-
-                            # 添加捕获到的消息内容
-                            if hasattr(captured_msg, "chain") and captured_msg.chain:
-                                for component in captured_msg.chain:
-                                    forward_msg.chain.append(component)
-
-                            # 发送转发消息
-                            await self.context.send_message(
-                                event.unified_msg_origin, forward_msg
-                            )
-
-                            # 如果有多条消息，添加间隔
-                            if (
-                                len(captured_messages) > 1
-                                and i < len(captured_messages) - 1
-                            ):
-                                await asyncio.sleep(forward_interval)
 
                 # 提取响应文本用于返回给LLM函数
                 response_texts = []

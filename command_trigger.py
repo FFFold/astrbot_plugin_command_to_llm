@@ -17,7 +17,9 @@ class CommandTrigger:
         self.target_event = None  # 目标事件对象
         self.event_factory = EventFactory(context)  # 事件工厂
 
-    def setup_message_interceptor(self, target_event, on_captured=None):
+    def setup_message_interceptor(
+        self, target_event, on_captured=None, on_message_captured=None
+    ):
         """设置消息拦截器来捕获指令的响应"""
         self.target_event = target_event
         self.captured_messages = []
@@ -50,6 +52,12 @@ class CommandTrigger:
                     logger.error(f"消息捕获回调执行失败: {e}")
 
             logger.info(f"当前已捕获 {len(self.captured_messages)} 条响应消息")
+
+            if on_message_captured is not None and message_chain is not None:
+                try:
+                    on_message_captured(message_chain)
+                except Exception as e:
+                    logger.error(f"捕获消息即时处理失败: {e}")
 
             # 设置已发送标记，但不实际发送到平台
             target_event._has_send_oper = True
@@ -87,16 +95,26 @@ class CommandTrigger:
         wait_interval: float = 0.1,
         expected_message_count: int = 0,
         post_capture_quiet_sec: float = 0.0,
+        on_message_captured=None,
     ):
         """触发指令并捕获响应"""
         try:
             logger.info(f"开始触发指令: {command}")
             loop = asyncio.get_running_loop()
             last_capture_time = None
+            pending_message_tasks = []
 
             def mark_captured():
                 nonlocal last_capture_time
                 last_capture_time = loop.time()
+
+            def dispatch_captured_message(message_chain):
+                if on_message_captured is None or message_chain is None:
+                    return
+
+                pending_message_tasks.append(
+                    asyncio.create_task(on_message_captured(message_chain))
+                )
 
             # 创建指令事件
             fake_event = self.create_command_event(
@@ -104,7 +122,11 @@ class CommandTrigger:
             )
 
             # 设置消息拦截器
-            self.setup_message_interceptor(fake_event, on_captured=mark_captured)
+            self.setup_message_interceptor(
+                fake_event,
+                on_captured=mark_captured,
+                on_message_captured=dispatch_captured_message,
+            )
 
             # 提交事件到事件队列
             event_queue = self.context.get_event_queue()
@@ -157,6 +179,14 @@ class CommandTrigger:
 
             # 恢复原始消息发送器
             self.restore_message_sender()
+
+            if pending_message_tasks:
+                task_results = await asyncio.gather(
+                    *pending_message_tasks, return_exceptions=True
+                )
+                for task_result in task_results:
+                    if isinstance(task_result, Exception):
+                        raise task_result
 
             if self.captured_messages:
                 return True, self.captured_messages
