@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -41,7 +42,10 @@ class CommandTrigger:
 
             if on_captured is not None:
                 try:
-                    on_captured()
+                    callback_result = on_captured()
+                    if inspect.isawaitable(callback_result):
+                        logger.error("消息捕获回调必须是同步函数，忽略异步回调结果")
+                        callback_result.close()
                 except Exception as e:
                     logger.error(f"消息捕获回调执行失败: {e}")
 
