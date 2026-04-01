@@ -136,9 +136,7 @@ class CommandToLLM(Star):
         # 解析指令名（将 -- 替换为空格）
         command_text = command_str.replace("--", " ")
 
-        result = await self.command_processor.execute_command(
-            event, command_text, args
-        )
+        result = await self.command_processor.execute_command(event, command_text, args)
         yield event.plain_result(result)
 
     @cmd2llm.command("help")

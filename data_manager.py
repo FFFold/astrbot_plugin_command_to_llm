@@ -68,11 +68,15 @@ class DataManager:
         execution_config = self._get_section(
             "execution_config",
             {
+                "expected_message_count": 0,
+                "post_capture_quiet_sec": 0,
                 "capture_timeout_sec": 20,
                 "forward_interval_sec": 0.5,
                 "response_mode": "forward_only",
             },
         )
+        execution_config.setdefault("expected_message_count", 0)
+        execution_config.setdefault("post_capture_quiet_sec", 0)
         execution_config.setdefault("capture_timeout_sec", 20)
         execution_config.setdefault("forward_interval_sec", 0.5)
         execution_config.setdefault("response_mode", "forward_only")
@@ -131,6 +135,9 @@ class DataManager:
                 "llm_function": llm_function,
                 "description": str(item.get("description", "")).strip(),
                 "arg_description": str(item.get("arg_description", "")).strip(),
+                "expected_message_count": item.get("expected_message_count", 0),
+                "post_capture_quiet_sec": item.get("post_capture_quiet_sec", 0),
+                "capture_timeout_sec": item.get("capture_timeout_sec", 0),
                 "enabled": bool(item.get("enabled", True)),
                 "group": str(item.get("group", "default")).strip() or "default",
                 "aliases": [
@@ -151,6 +158,9 @@ class DataManager:
                     "llm_function": str(mapping.get("llm_function", "")),
                     "description": str(mapping.get("description", "")),
                     "arg_description": str(mapping.get("arg_description", "")),
+                    "expected_message_count": mapping.get("expected_message_count", 0),
+                    "post_capture_quiet_sec": mapping.get("post_capture_quiet_sec", 0),
+                    "capture_timeout_sec": mapping.get("capture_timeout_sec", 0),
                     "group": str(mapping.get("group", "default")) or "default",
                     "aliases": list(mapping.get("aliases", [])),
                     "created_at": str(mapping.get("created_at", "")),
@@ -269,6 +279,21 @@ class DataManager:
         except Exception:
             return 20.0
 
+    def get_post_capture_quiet_sec(self) -> float:
+        execution_config = self._get_section("execution_config", {})
+        try:
+            return max(float(execution_config.get("post_capture_quiet_sec", 0)), 0.0)
+        except Exception:
+            return 0.0
+
+    def get_expected_message_count(self) -> int:
+        execution_config = self._get_section("execution_config", {})
+        try:
+            value = int(execution_config.get("expected_message_count", 0))
+            return max(value, 0)
+        except Exception:
+            return 0
+
     def get_forward_interval(self) -> float:
         execution_config = self._get_section("execution_config", {})
         try:
@@ -282,6 +307,52 @@ class DataManager:
         if mode not in {"forward_and_text", "text_only", "forward_only"}:
             return "forward_only"
         return mode
+
+    def get_execution_options(self, mapping: Dict[str, Any] = None) -> Dict[str, Any]:
+        execution_config = self._get_section("execution_config", {})
+        mapping = mapping or {}
+
+        def _resolve_float(key: str, default_value: float, minimum: float) -> float:
+            mapping_value = mapping.get(key, 0)
+            try:
+                if float(mapping_value) > 0:
+                    return max(float(mapping_value), minimum)
+            except Exception:
+                pass
+
+            try:
+                return max(float(execution_config.get(key, default_value)), minimum)
+            except Exception:
+                return default_value
+
+        def _resolve_int(key: str, default_value: int, minimum: int = 0) -> int:
+            mapping_value = mapping.get(key, 0)
+            try:
+                if int(mapping_value) > 0:
+                    return max(int(mapping_value), minimum)
+            except Exception:
+                pass
+
+            try:
+                return max(int(execution_config.get(key, default_value)), minimum)
+            except Exception:
+                return default_value
+
+        return {
+            "expected_message_count": _resolve_int(
+                "expected_message_count", 0, minimum=0
+            ),
+            "post_capture_quiet_sec": _resolve_float(
+                "post_capture_quiet_sec", 0.0, minimum=0.0
+            ),
+            "capture_timeout_sec": _resolve_float(
+                "capture_timeout_sec", 20.0, minimum=1.0
+            ),
+            "forward_interval_sec": _resolve_float(
+                "forward_interval_sec", 0.5, minimum=0.0
+            ),
+            "response_mode": self.get_response_mode(),
+        }
 
     def get_tool_description(self) -> str:
         tool_config = self._get_section("tool_config", {})
@@ -337,19 +408,22 @@ class DataManager:
             logger.warning(f"[data_manager] 指令已存在: {command_name}")
             return False, f"指令 '{command_name}' 已存在映射"
 
-        logger.info(f"[data_manager] 开始添加映射")
+        logger.info("[data_manager] 开始添加映射")
         self.command_mappings[command_name] = {
             "llm_function": llm_function,
             "description": description,
+            "expected_message_count": 0,
+            "post_capture_quiet_sec": 0,
+            "capture_timeout_sec": 0,
             "enabled": True,
             "group": "default",
             "aliases": [],
             "created_at": str(datetime.datetime.now()),
         }
 
-        logger.info(f"[data_manager] 保存映射配置")
+        logger.info("[data_manager] 保存映射配置")
         self._save_mappings_to_config()
-        logger.info(f"[data_manager] 映射添加完成")
+        logger.info("[data_manager] 映射添加完成")
         return True, f"成功添加指令映射：'{command_name}' -> '{llm_function}'"
 
     def remove_mapping(self, command_name: str) -> bool:

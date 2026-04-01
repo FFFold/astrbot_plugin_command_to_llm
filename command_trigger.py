@@ -16,7 +16,7 @@ class CommandTrigger:
         self.target_event = None  # 目标事件对象
         self.event_factory = EventFactory(context)  # 事件工厂
 
-    def setup_message_interceptor(self, target_event):
+    def setup_message_interceptor(self, target_event, on_captured=None):
         """设置消息拦截器来捕获指令的响应"""
         self.target_event = target_event
         self.captured_messages = []
@@ -34,10 +34,15 @@ class CommandTrigger:
                 )
                 self.captured_messages.append(message_chain)
             else:
-                logger.info(f"捕获到指令响应消息，但消息为空或格式不正确")
+                logger.info("捕获到指令响应消息，但消息为空或格式不正确")
                 # 即使消息为空，也记录为已捕获
                 if message_chain is not None:
                     self.captured_messages.append(message_chain)
+
+            if on_captured is not None:
+                on_captured()
+
+            logger.info(f"当前已捕获 {len(self.captured_messages)} 条响应消息")
 
             # 设置已发送标记，但不实际发送到平台
             target_event._has_send_oper = True
@@ -73,10 +78,18 @@ class CommandTrigger:
         creator_name: str = None,
         max_wait_time: float = 20.0,
         wait_interval: float = 0.1,
+        expected_message_count: int = 0,
+        post_capture_quiet_time: float = 8.0,
     ):
         """触发指令并捕获响应"""
         try:
             logger.info(f"开始触发指令: {command}")
+            loop = asyncio.get_running_loop()
+            last_capture_time = None
+
+            def mark_captured():
+                nonlocal last_capture_time
+                last_capture_time = loop.time()
 
             # 创建指令事件
             fake_event = self.create_command_event(
@@ -84,7 +97,7 @@ class CommandTrigger:
             )
 
             # 设置消息拦截器
-            self.setup_message_interceptor(fake_event)
+            self.setup_message_interceptor(fake_event, on_captured=mark_captured)
 
             # 提交事件到事件队列
             event_queue = self.context.get_event_queue()
@@ -95,15 +108,44 @@ class CommandTrigger:
             # 等待指令执行并捕获响应
             max_wait_time = max(max_wait_time, 1.0)
             wait_interval = max(wait_interval, 0.05)
-            waited_time = 0.0
+            post_capture_quiet_time = max(post_capture_quiet_time, 0.0)
+            expected_message_count = max(int(expected_message_count), 0)
+            start_time = loop.time()
 
-            while waited_time < max_wait_time:
+            while True:
                 await asyncio.sleep(wait_interval)
-                waited_time += wait_interval
+                now = loop.time()
 
-                # 检查是否捕获到了消息
-                if self.captured_messages:
-                    logger.info(f"成功捕获到 {len(self.captured_messages)} 条响应消息")
+                if expected_message_count > 0 and (
+                    len(self.captured_messages) >= expected_message_count
+                ):
+                    logger.info(
+                        f"成功捕获到 {len(self.captured_messages)} 条响应消息，达到预期条数 {expected_message_count}，结束捕获"
+                    )
+                    break
+
+                if (
+                    post_capture_quiet_time > 0
+                    and self.captured_messages
+                    and last_capture_time is not None
+                ):
+                    quiet_duration = now - last_capture_time
+                    if quiet_duration >= post_capture_quiet_time:
+                        logger.info(
+                            f"成功捕获到 {len(self.captured_messages)} 条响应消息，末条静默 {quiet_duration:.2f}s 已达到 {post_capture_quiet_time:.2f}s，结束捕获"
+                        )
+                        break
+
+                total_waited = now - start_time
+                if total_waited >= max_wait_time:
+                    if self.captured_messages:
+                        logger.info(
+                            f"成功捕获到 {len(self.captured_messages)} 条响应消息，总等待 {total_waited:.2f}s 达到超时上限 {max_wait_time:.2f}s，结束捕获"
+                        )
+                    else:
+                        logger.warning(
+                            f"等待 {max_wait_time} 秒后未捕获到指令 {command} 的响应消息"
+                        )
                     break
 
             # 恢复原始消息发送器
@@ -112,9 +154,6 @@ class CommandTrigger:
             if self.captured_messages:
                 return True, self.captured_messages
             else:
-                logger.warning(
-                    f"等待 {max_wait_time} 秒后未捕获到指令 {command} 的响应消息"
-                )
                 return False, []
 
         except Exception as e:
@@ -136,6 +175,8 @@ class CommandTrigger:
         max_wait_time: float = 20.0,
         wait_interval: float = 0.1,
         forward_interval: float = 0.5,
+        expected_message_count: int = 0,
+        post_capture_quiet_time: float = 8.0,
     ):
         """触发指令并转发结果"""
         # 触发指令并捕获响应
@@ -146,6 +187,8 @@ class CommandTrigger:
             creator_name,
             max_wait_time,
             wait_interval,
+            expected_message_count,
+            post_capture_quiet_time,
         )
 
         if success and captured_messages:
