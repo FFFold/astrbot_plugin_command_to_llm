@@ -107,6 +107,28 @@ class CommandProcessor:
             forward_interval = execution_options["forward_interval_sec"]
             response_mode = execution_options["response_mode"]
 
+            last_forward_time = None
+            forward_lock = asyncio.Lock()
+
+            async def handle_captured_message(message_chain):
+                nonlocal last_forward_time
+
+                if response_mode not in {"forward_and_text", "forward_only"}:
+                    return
+
+                async with forward_lock:
+                    now = asyncio.get_running_loop().time()
+                    if last_forward_time is not None and forward_interval > 0:
+                        elapsed = now - last_forward_time
+                        if elapsed < forward_interval:
+                            await asyncio.sleep(forward_interval - elapsed)
+
+                    await self.context.send_message(
+                        event.unified_msg_origin,
+                        self._prepare_captured_message_for_forward(message_chain),
+                    )
+                    last_forward_time = asyncio.get_running_loop().time()
+
             # 使用指令执行器执行指令
             (
                 success,
@@ -120,34 +142,14 @@ class CommandProcessor:
                 wait_interval=wait_interval,
                 expected_message_count=execution_options["expected_message_count"],
                 post_capture_quiet_sec=execution_options["post_capture_quiet_sec"],
+                on_message_captured=handle_captured_message,
             )
 
             if success and captured_messages:
                 if response_mode in {"forward_and_text", "forward_only"}:
                     logger.info(
-                        f"[command_processor] 开始主动发送转发消息，mode={response_mode}"
+                        f"[command_processor] 已在捕获阶段即时转发消息，mode={response_mode}"
                     )
-
-                    for i, captured_msg in enumerate(captured_messages):
-                        if captured_msg is not None:
-                            logger.info(
-                                f"[command_processor] 发送第 {i + 1} 条转发消息"
-                            )
-
-                            # 发送转发消息
-                            await self.context.send_message(
-                                event.unified_msg_origin,
-                                self._prepare_captured_message_for_forward(
-                                    captured_msg
-                                ),
-                            )
-
-                            # 如果有多条消息，添加间隔
-                            if (
-                                len(captured_messages) > 1
-                                and i < len(captured_messages) - 1
-                            ):
-                                await asyncio.sleep(forward_interval)
 
                 # 提取响应文本用于返回给LLM函数
                 response_texts = []
