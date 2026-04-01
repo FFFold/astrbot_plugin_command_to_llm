@@ -42,10 +42,10 @@ class CommandTrigger:
 
             if on_captured is not None:
                 try:
-                    callback_result = on_captured()
-                    if inspect.isawaitable(callback_result):
-                        logger.error("消息捕获回调必须是同步函数，忽略异步回调结果")
-                        callback_result.close()
+                    if inspect.iscoroutinefunction(on_captured):
+                        logger.error("消息捕获回调必须是同步函数，忽略异步回调")
+                    else:
+                        on_captured()
                 except Exception as e:
                     logger.error(f"消息捕获回调执行失败: {e}")
 
