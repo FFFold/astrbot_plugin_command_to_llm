@@ -40,7 +40,10 @@ class CommandTrigger:
                     self.captured_messages.append(message_chain)
 
             if on_captured is not None:
-                on_captured()
+                try:
+                    on_captured()
+                except Exception as e:
+                    logger.error(f"消息捕获回调执行失败: {e}")
 
             logger.info(f"当前已捕获 {len(self.captured_messages)} 条响应消息")
 
@@ -79,7 +82,7 @@ class CommandTrigger:
         max_wait_time: float = 20.0,
         wait_interval: float = 0.1,
         expected_message_count: int = 0,
-        post_capture_quiet_time: float = 8.0,
+        post_capture_quiet_sec: float = 8.0,
     ):
         """触发指令并捕获响应"""
         try:
@@ -108,7 +111,7 @@ class CommandTrigger:
             # 等待指令执行并捕获响应
             max_wait_time = max(max_wait_time, 1.0)
             wait_interval = max(wait_interval, 0.05)
-            post_capture_quiet_time = max(post_capture_quiet_time, 0.0)
+            post_capture_quiet_sec = max(post_capture_quiet_sec, 0.0)
             expected_message_count = max(int(expected_message_count), 0)
             start_time = loop.time()
 
@@ -125,14 +128,14 @@ class CommandTrigger:
                     break
 
                 if (
-                    post_capture_quiet_time > 0
+                    post_capture_quiet_sec > 0
                     and self.captured_messages
                     and last_capture_time is not None
                 ):
                     quiet_duration = now - last_capture_time
-                    if quiet_duration >= post_capture_quiet_time:
+                    if quiet_duration >= post_capture_quiet_sec:
                         logger.info(
-                            f"成功捕获到 {len(self.captured_messages)} 条响应消息，末条静默 {quiet_duration:.2f}s 已达到 {post_capture_quiet_time:.2f}s，结束捕获"
+                            f"成功捕获到 {len(self.captured_messages)} 条响应消息，末条静默 {quiet_duration:.2f}s 已达到 {post_capture_quiet_sec:.2f}s，结束捕获"
                         )
                         break
 
@@ -176,7 +179,7 @@ class CommandTrigger:
         wait_interval: float = 0.1,
         forward_interval: float = 0.5,
         expected_message_count: int = 0,
-        post_capture_quiet_time: float = 8.0,
+        post_capture_quiet_sec: float = 8.0,
     ):
         """触发指令并转发结果"""
         # 触发指令并捕获响应
@@ -188,7 +191,7 @@ class CommandTrigger:
             max_wait_time,
             wait_interval,
             expected_message_count,
-            post_capture_quiet_time,
+            post_capture_quiet_sec,
         )
 
         if success and captured_messages:

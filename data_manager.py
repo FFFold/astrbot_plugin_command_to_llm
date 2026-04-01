@@ -65,16 +65,7 @@ class DataManager:
             mapping_config["command_mappings"] = []
         mapping_config.setdefault("allow_duplicate_llm_function", True)
 
-        execution_config = self._get_section(
-            "execution_config",
-            {
-                "expected_message_count": 0,
-                "post_capture_quiet_sec": 0,
-                "capture_timeout_sec": 20,
-                "forward_interval_sec": 0.5,
-                "response_mode": "forward_only",
-            },
-        )
+        execution_config = self._get_section("execution_config", {})
         execution_config.setdefault("expected_message_count", 0)
         execution_config.setdefault("post_capture_quiet_sec", 0)
         execution_config.setdefault("capture_timeout_sec", 20)

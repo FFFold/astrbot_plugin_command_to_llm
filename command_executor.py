@@ -75,7 +75,7 @@ class CommandExecutor:
                 max_wait_time=capture_timeout,
                 wait_interval=wait_interval,
                 expected_message_count=expected_message_count,
-                post_capture_quiet_time=post_capture_quiet_sec,
+                post_capture_quiet_sec=post_capture_quiet_sec,
             )
 
             if success:
@@ -142,7 +142,7 @@ class CommandExecutor:
                 wait_interval=wait_interval,
                 forward_interval=forward_interval,
                 expected_message_count=expected_message_count,
-                post_capture_quiet_time=post_capture_quiet_sec,
+                post_capture_quiet_sec=post_capture_quiet_sec,
             )
         except Exception as e:
             logger.error(f"执行并转发指令失败(可配置): {str(e)}")
