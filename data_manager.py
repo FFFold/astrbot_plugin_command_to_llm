@@ -276,73 +276,19 @@ class DataManager:
         return bool(mapping_config.get("allow_duplicate_llm_function", True))
 
     def get_capture_timeout(self) -> float:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            return max(
-                float(
-                    execution_config.get(
-                        "capture_timeout_sec",
-                        self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"],
-                    )
-                ),
-                self.EXECUTION_OPTION_MINIMUMS["capture_timeout_sec"],
-            )
-        except Exception:
-            return self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"]
+        return self.get_execution_options()["capture_timeout_sec"]
 
     def get_post_capture_quiet_sec(self) -> float:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            return max(
-                float(
-                    execution_config.get(
-                        "post_capture_quiet_sec",
-                        self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"],
-                    )
-                ),
-                self.EXECUTION_OPTION_MINIMUMS["post_capture_quiet_sec"],
-            )
-        except Exception:
-            return self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"]
+        return self.get_execution_options()["post_capture_quiet_sec"]
 
     def get_expected_message_count(self) -> int:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            value = int(
-                execution_config.get(
-                    "expected_message_count",
-                    self.EXECUTION_OPTION_DEFAULTS["expected_message_count"],
-                )
-            )
-            return max(value, self.EXECUTION_OPTION_MINIMUMS["expected_message_count"])
-        except Exception:
-            return self.EXECUTION_OPTION_DEFAULTS["expected_message_count"]
+        return self.get_execution_options()["expected_message_count"]
 
     def get_forward_interval(self) -> float:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            return max(
-                float(
-                    execution_config.get(
-                        "forward_interval_sec",
-                        self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"],
-                    )
-                ),
-                self.EXECUTION_OPTION_MINIMUMS["forward_interval_sec"],
-            )
-        except Exception:
-            return self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"]
+        return self.get_execution_options()["forward_interval_sec"]
 
     def get_response_mode(self) -> str:
-        execution_config = self._get_section("execution_config", {})
-        mode = str(
-            execution_config.get(
-                "response_mode", self.EXECUTION_OPTION_DEFAULTS["response_mode"]
-            )
-        )
-        if mode not in {"forward_and_text", "text_only", "forward_only"}:
-            return self.EXECUTION_OPTION_DEFAULTS["response_mode"]
-        return mode
+        return self.get_execution_options()["response_mode"]
 
     def get_execution_options(self, mapping: Dict[str, Any] = None) -> Dict[str, Any]:
         execution_config = self._get_section("execution_config", {})
@@ -395,8 +341,18 @@ class DataManager:
                 self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"],
                 minimum=self.EXECUTION_OPTION_MINIMUMS["forward_interval_sec"],
             ),
-            "response_mode": self.get_response_mode(),
+            "response_mode": self._resolve_response_mode(
+                execution_config.get(
+                    "response_mode", self.EXECUTION_OPTION_DEFAULTS["response_mode"]
+                )
+            ),
         }
+
+    def _resolve_response_mode(self, mode: Any) -> str:
+        mode = str(mode)
+        if mode not in {"forward_and_text", "text_only", "forward_only"}:
+            return self.EXECUTION_OPTION_DEFAULTS["response_mode"]
+        return mode
 
     def get_tool_description(self) -> str:
         tool_config = self._get_section("tool_config", {})
