@@ -3,9 +3,6 @@ from typing import List
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Plain
-from astrbot.core.message.message_event_result import MessageChain
-
 from .command_executor import CommandExecutor
 
 
@@ -119,19 +116,9 @@ class CommandProcessor:
                                 f"[command_processor] 发送第 {i + 1} 条转发消息"
                             )
 
-                            forward_msg = MessageChain()
-                            forward_msg.chain.append(
-                                Plain(f"[指令执行] {command_text}\n")
-                            )
-
-                            # 添加捕获到的消息内容
-                            if hasattr(captured_msg, "chain") and captured_msg.chain:
-                                for component in captured_msg.chain:
-                                    forward_msg.chain.append(component)
-
                             # 发送转发消息
                             await self.context.send_message(
-                                event.unified_msg_origin, forward_msg
+                                event.unified_msg_origin, captured_msg
                             )
 
                             # 如果有多条消息，添加间隔

@@ -184,3 +184,7 @@ class CommandToLLM(Star):
         except Exception as e:
             logger.error(f"刷新动态LLM函数失败: {e}")
             yield event.plain_result(f"刷新失败：{str(e)}")
+
+    async def terminate(self):
+        """插件卸载时清理动态注册的 LLM 函数。"""
+        self.dynamic_llm_manager.cleanup_all_functions()
