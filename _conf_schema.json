@@ -71,6 +71,24 @@
                 "default": "",
                 "hint": "告诉 AI 这个映射的 args 应该怎么写。例如：text=提醒内容 time=HH:MM。留空则使用全局参数说明。"
               },
+              "expected_message_count": {
+                "description": "预期返回条数",
+                "type": "int",
+                "default": 0,
+                "hint": "大于 0 时，达到该条数立即停止捕获。返回条数不确定时建议保持 0。设为 0 表示继承全局设置。"
+              },
+              "post_capture_quiet_sec": {
+                "description": "末条静默超时（秒）",
+                "type": "float",
+                "default": 0,
+                "hint": "最后一条消息后等待多久没有新消息就结束捕获。设为 0 表示继承全局设置。"
+              },
+              "capture_timeout_sec": {
+                "description": "总捕获超时（秒）",
+                "type": "float",
+                "default": 0,
+                "hint": "整个捕获流程的最长等待时间。设为 0 表示继承全局设置。"
+              },
               "group": {
                 "description": "分组",
                 "type": "string",
@@ -99,9 +117,21 @@
     "description": "执行行为",
     "type": "object",
     "items": {
+      "expected_message_count": {
+        "description": "默认预期返回条数",
+        "type": "int",
+        "default": 0,
+        "hint": "大于 0 时，达到该条数立即停止捕获；返回条数不确定时建议保持 0。设为 0 表示不启用条数条件。"
+      },
+      "post_capture_quiet_sec": {
+        "description": "默认末条静默超时（秒）",
+        "type": "float",
+        "default": 0,
+        "hint": "最后一条消息后等待多久没有新消息就结束捕获。设为 0 表示不启用该条件。"
+      },
       "capture_timeout_sec": {
         "description": "指令响应捕获超时（秒）",
-        "type": "int",
+        "type": "float",
         "default": 60,
         "hint": "等待被触发命令返回消息的最长时间。"
       },

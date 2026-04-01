@@ -1,9 +1,11 @@
 import asyncio
 from typing import List
-from astrbot.api.event import AstrMessageEvent
+
 from astrbot.api import logger
-from .data_manager import DataManager
-from .utils import CommandUtils
+from astrbot.api.event import AstrMessageEvent
+from astrbot.api.message_components import Plain
+from astrbot.core.message.message_event_result import MessageChain
+
 from .command_executor import CommandExecutor
 
 
@@ -57,8 +59,6 @@ class CommandProcessor:
                 return f"错误：未找到指令 '{command_text}' 的映射。请先使用 add_command_mapping 添加映射。"
 
             llm_function = mapping.get("llm_function")
-            description = mapping.get("description", "")
-
             logger.info(f"执行指令映射: {command_text} -> {llm_function}")
 
             # 构建完整指令（自动匹配 AstrBot 主框架 wake_prefix）
@@ -86,10 +86,11 @@ class CommandProcessor:
             if hasattr(event, "message_obj") and hasattr(event.message_obj, "sender"):
                 creator_name = event.message_obj.sender.nickname
 
-            capture_timeout = self.data_manager.get_capture_timeout()
+            execution_options = self.data_manager.get_execution_options(mapping)
+            capture_timeout = execution_options["capture_timeout_sec"]
             wait_interval = min(0.5, max(0.05, capture_timeout / 200))
-            forward_interval = self.data_manager.get_forward_interval()
-            response_mode = self.data_manager.get_response_mode()
+            forward_interval = execution_options["forward_interval_sec"]
+            response_mode = execution_options["response_mode"]
 
             # 使用指令执行器执行指令
             (
@@ -102,6 +103,8 @@ class CommandProcessor:
                 creator_name,
                 capture_timeout=capture_timeout,
                 wait_interval=wait_interval,
+                expected_message_count=execution_options["expected_message_count"],
+                post_capture_quiet_sec=execution_options["post_capture_quiet_sec"],
             )
 
             if success and captured_messages:
@@ -115,12 +118,6 @@ class CommandProcessor:
                             logger.info(
                                 f"[command_processor] 发送第 {i + 1} 条转发消息"
                             )
-
-                            # 构建转发消息
-                            from astrbot.core.message.message_event_result import (
-                                MessageChain,
-                            )
-                            from astrbot.api.message_components import Plain
 
                             forward_msg = MessageChain()
                             forward_msg.chain.append(
@@ -205,10 +202,10 @@ class CommandProcessor:
             )
 
             if success and self.data_manager.should_auto_refresh_on_change():
-                logger.info(f"[command_processor] 开始刷新动态LLM函数")
+                logger.info("[command_processor] 开始刷新动态LLM函数")
                 # 刷新动态LLM函数
                 self.star.dynamic_llm_manager.refresh_functions()
-                logger.info(f"[command_processor] 动态LLM函数刷新完成")
+                logger.info("[command_processor] 动态LLM函数刷新完成")
 
             yield event.plain_result(message)
 

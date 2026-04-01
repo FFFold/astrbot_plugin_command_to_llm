@@ -8,6 +8,21 @@ from .utils import CommandUtils
 
 
 class DataManager:
+    EXECUTION_OPTION_DEFAULTS = {
+        "expected_message_count": 0,
+        "post_capture_quiet_sec": 0.0,
+        "capture_timeout_sec": 20.0,
+        "forward_interval_sec": 0.5,
+        "response_mode": "forward_only",
+    }
+
+    EXECUTION_OPTION_MINIMUMS = {
+        "expected_message_count": 0,
+        "post_capture_quiet_sec": 0.0,
+        "capture_timeout_sec": 1.0,
+        "forward_interval_sec": 0.0,
+    }
+
     def __init__(self, context: Context, config):
         self.context = context
         self.config = config
@@ -65,17 +80,9 @@ class DataManager:
             mapping_config["command_mappings"] = []
         mapping_config.setdefault("allow_duplicate_llm_function", True)
 
-        execution_config = self._get_section(
-            "execution_config",
-            {
-                "capture_timeout_sec": 20,
-                "forward_interval_sec": 0.5,
-                "response_mode": "forward_only",
-            },
-        )
-        execution_config.setdefault("capture_timeout_sec", 20)
-        execution_config.setdefault("forward_interval_sec", 0.5)
-        execution_config.setdefault("response_mode", "forward_only")
+        execution_config = self._get_section("execution_config", {})
+        for key, value in self.EXECUTION_OPTION_DEFAULTS.items():
+            execution_config.setdefault(key, value)
 
         compat_config = self._get_section(
             "compat_config",
@@ -131,6 +138,9 @@ class DataManager:
                 "llm_function": llm_function,
                 "description": str(item.get("description", "")).strip(),
                 "arg_description": str(item.get("arg_description", "")).strip(),
+                "expected_message_count": item.get("expected_message_count", 0),
+                "post_capture_quiet_sec": item.get("post_capture_quiet_sec", 0),
+                "capture_timeout_sec": item.get("capture_timeout_sec", 0),
                 "enabled": bool(item.get("enabled", True)),
                 "group": str(item.get("group", "default")).strip() or "default",
                 "aliases": [
@@ -151,6 +161,9 @@ class DataManager:
                     "llm_function": str(mapping.get("llm_function", "")),
                     "description": str(mapping.get("description", "")),
                     "arg_description": str(mapping.get("arg_description", "")),
+                    "expected_message_count": mapping.get("expected_message_count", 0),
+                    "post_capture_quiet_sec": mapping.get("post_capture_quiet_sec", 0),
+                    "capture_timeout_sec": mapping.get("capture_timeout_sec", 0),
                     "group": str(mapping.get("group", "default")) or "default",
                     "aliases": list(mapping.get("aliases", [])),
                     "created_at": str(mapping.get("created_at", "")),
@@ -263,24 +276,82 @@ class DataManager:
         return bool(mapping_config.get("allow_duplicate_llm_function", True))
 
     def get_capture_timeout(self) -> float:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            return max(float(execution_config.get("capture_timeout_sec", 20)), 1.0)
-        except Exception:
-            return 20.0
+        return self.get_execution_options()["capture_timeout_sec"]
+
+    def get_post_capture_quiet_sec(self) -> float:
+        return self.get_execution_options()["post_capture_quiet_sec"]
+
+    def get_expected_message_count(self) -> int:
+        return self.get_execution_options()["expected_message_count"]
 
     def get_forward_interval(self) -> float:
-        execution_config = self._get_section("execution_config", {})
-        try:
-            return max(float(execution_config.get("forward_interval_sec", 0.5)), 0.0)
-        except Exception:
-            return 0.5
+        return self.get_execution_options()["forward_interval_sec"]
 
     def get_response_mode(self) -> str:
+        return self.get_execution_options()["response_mode"]
+
+    def get_execution_options(self, mapping: Dict[str, Any] = None) -> Dict[str, Any]:
         execution_config = self._get_section("execution_config", {})
-        mode = str(execution_config.get("response_mode", "forward_only"))
+        mapping = mapping or {}
+
+        def _resolve_float(key: str, default_value: float, minimum: float) -> float:
+            mapping_value = mapping.get(key, 0)
+            try:
+                if float(mapping_value) > 0:
+                    return max(float(mapping_value), minimum)
+            except Exception:
+                pass
+
+            try:
+                return max(float(execution_config.get(key, default_value)), minimum)
+            except Exception:
+                return default_value
+
+        def _resolve_int(key: str, default_value: int, minimum: int = 0) -> int:
+            mapping_value = mapping.get(key, 0)
+            try:
+                if int(mapping_value) > 0:
+                    return max(int(mapping_value), minimum)
+            except Exception:
+                pass
+
+            try:
+                return max(int(execution_config.get(key, default_value)), minimum)
+            except Exception:
+                return default_value
+
+        return {
+            "expected_message_count": _resolve_int(
+                "expected_message_count",
+                self.EXECUTION_OPTION_DEFAULTS["expected_message_count"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["expected_message_count"],
+            ),
+            "post_capture_quiet_sec": _resolve_float(
+                "post_capture_quiet_sec",
+                self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["post_capture_quiet_sec"],
+            ),
+            "capture_timeout_sec": _resolve_float(
+                "capture_timeout_sec",
+                self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["capture_timeout_sec"],
+            ),
+            "forward_interval_sec": _resolve_float(
+                "forward_interval_sec",
+                self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["forward_interval_sec"],
+            ),
+            "response_mode": self._resolve_response_mode(
+                execution_config.get(
+                    "response_mode", self.EXECUTION_OPTION_DEFAULTS["response_mode"]
+                )
+            ),
+        }
+
+    def _resolve_response_mode(self, mode: Any) -> str:
+        mode = str(mode)
         if mode not in {"forward_and_text", "text_only", "forward_only"}:
-            return "forward_only"
+            return self.EXECUTION_OPTION_DEFAULTS["response_mode"]
         return mode
 
     def get_tool_description(self) -> str:
@@ -337,19 +408,22 @@ class DataManager:
             logger.warning(f"[data_manager] 指令已存在: {command_name}")
             return False, f"指令 '{command_name}' 已存在映射"
 
-        logger.info(f"[data_manager] 开始添加映射")
+        logger.info("[data_manager] 开始添加映射")
         self.command_mappings[command_name] = {
             "llm_function": llm_function,
             "description": description,
+            "expected_message_count": 0,
+            "post_capture_quiet_sec": 0,
+            "capture_timeout_sec": 0,
             "enabled": True,
             "group": "default",
             "aliases": [],
             "created_at": str(datetime.datetime.now()),
         }
 
-        logger.info(f"[data_manager] 保存映射配置")
+        logger.info("[data_manager] 保存映射配置")
         self._save_mappings_to_config()
-        logger.info(f"[data_manager] 映射添加完成")
+        logger.info("[data_manager] 映射添加完成")
         return True, f"成功添加指令映射：'{command_name}' -> '{llm_function}'"
 
     def remove_mapping(self, command_name: str) -> bool:
