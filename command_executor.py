@@ -56,7 +56,7 @@ class CommandExecutor:
         capture_timeout: float = 20.0,
         wait_interval: float = 0.1,
         expected_message_count: int = 0,
-        post_capture_quiet_sec: float = 8.0,
+        post_capture_quiet_sec: float = 0.0,
     ) -> Tuple[bool, List[MessageChain]]:
         """执行指令并捕获响应（可配置超时）"""
         try:
@@ -125,7 +125,7 @@ class CommandExecutor:
         wait_interval: float = 0.1,
         forward_interval: float = 0.5,
         expected_message_count: int = 0,
-        post_capture_quiet_sec: float = 8.0,
+        post_capture_quiet_sec: float = 0.0,
     ):
         """执行指令并转发结果（可配置超时与间隔）"""
         try:

@@ -8,6 +8,21 @@ from .utils import CommandUtils
 
 
 class DataManager:
+    EXECUTION_OPTION_DEFAULTS = {
+        "expected_message_count": 0,
+        "post_capture_quiet_sec": 0.0,
+        "capture_timeout_sec": 20.0,
+        "forward_interval_sec": 0.5,
+        "response_mode": "forward_only",
+    }
+
+    EXECUTION_OPTION_MINIMUMS = {
+        "expected_message_count": 0,
+        "post_capture_quiet_sec": 0.0,
+        "capture_timeout_sec": 1.0,
+        "forward_interval_sec": 0.0,
+    }
+
     def __init__(self, context: Context, config):
         self.context = context
         self.config = config
@@ -66,11 +81,8 @@ class DataManager:
         mapping_config.setdefault("allow_duplicate_llm_function", True)
 
         execution_config = self._get_section("execution_config", {})
-        execution_config.setdefault("expected_message_count", 0)
-        execution_config.setdefault("post_capture_quiet_sec", 0)
-        execution_config.setdefault("capture_timeout_sec", 20)
-        execution_config.setdefault("forward_interval_sec", 0.5)
-        execution_config.setdefault("response_mode", "forward_only")
+        for key, value in self.EXECUTION_OPTION_DEFAULTS.items():
+            execution_config.setdefault(key, value)
 
         compat_config = self._get_section(
             "compat_config",
@@ -266,37 +278,70 @@ class DataManager:
     def get_capture_timeout(self) -> float:
         execution_config = self._get_section("execution_config", {})
         try:
-            return max(float(execution_config.get("capture_timeout_sec", 20)), 1.0)
+            return max(
+                float(
+                    execution_config.get(
+                        "capture_timeout_sec",
+                        self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"],
+                    )
+                ),
+                self.EXECUTION_OPTION_MINIMUMS["capture_timeout_sec"],
+            )
         except Exception:
-            return 20.0
+            return self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"]
 
     def get_post_capture_quiet_sec(self) -> float:
         execution_config = self._get_section("execution_config", {})
         try:
-            return max(float(execution_config.get("post_capture_quiet_sec", 0)), 0.0)
+            return max(
+                float(
+                    execution_config.get(
+                        "post_capture_quiet_sec",
+                        self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"],
+                    )
+                ),
+                self.EXECUTION_OPTION_MINIMUMS["post_capture_quiet_sec"],
+            )
         except Exception:
-            return 0.0
+            return self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"]
 
     def get_expected_message_count(self) -> int:
         execution_config = self._get_section("execution_config", {})
         try:
-            value = int(execution_config.get("expected_message_count", 0))
-            return max(value, 0)
+            value = int(
+                execution_config.get(
+                    "expected_message_count",
+                    self.EXECUTION_OPTION_DEFAULTS["expected_message_count"],
+                )
+            )
+            return max(value, self.EXECUTION_OPTION_MINIMUMS["expected_message_count"])
         except Exception:
-            return 0
+            return self.EXECUTION_OPTION_DEFAULTS["expected_message_count"]
 
     def get_forward_interval(self) -> float:
         execution_config = self._get_section("execution_config", {})
         try:
-            return max(float(execution_config.get("forward_interval_sec", 0.5)), 0.0)
+            return max(
+                float(
+                    execution_config.get(
+                        "forward_interval_sec",
+                        self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"],
+                    )
+                ),
+                self.EXECUTION_OPTION_MINIMUMS["forward_interval_sec"],
+            )
         except Exception:
-            return 0.5
+            return self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"]
 
     def get_response_mode(self) -> str:
         execution_config = self._get_section("execution_config", {})
-        mode = str(execution_config.get("response_mode", "forward_only"))
+        mode = str(
+            execution_config.get(
+                "response_mode", self.EXECUTION_OPTION_DEFAULTS["response_mode"]
+            )
+        )
         if mode not in {"forward_and_text", "text_only", "forward_only"}:
-            return "forward_only"
+            return self.EXECUTION_OPTION_DEFAULTS["response_mode"]
         return mode
 
     def get_execution_options(self, mapping: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -331,16 +376,24 @@ class DataManager:
 
         return {
             "expected_message_count": _resolve_int(
-                "expected_message_count", 0, minimum=0
+                "expected_message_count",
+                self.EXECUTION_OPTION_DEFAULTS["expected_message_count"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["expected_message_count"],
             ),
             "post_capture_quiet_sec": _resolve_float(
-                "post_capture_quiet_sec", 0.0, minimum=0.0
+                "post_capture_quiet_sec",
+                self.EXECUTION_OPTION_DEFAULTS["post_capture_quiet_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["post_capture_quiet_sec"],
             ),
             "capture_timeout_sec": _resolve_float(
-                "capture_timeout_sec", 20.0, minimum=1.0
+                "capture_timeout_sec",
+                self.EXECUTION_OPTION_DEFAULTS["capture_timeout_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["capture_timeout_sec"],
             ),
             "forward_interval_sec": _resolve_float(
-                "forward_interval_sec", 0.5, minimum=0.0
+                "forward_interval_sec",
+                self.EXECUTION_OPTION_DEFAULTS["forward_interval_sec"],
+                minimum=self.EXECUTION_OPTION_MINIMUMS["forward_interval_sec"],
             ),
             "response_mode": self.get_response_mode(),
         }
