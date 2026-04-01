@@ -3,6 +3,9 @@ from typing import List
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.api.message_components import Reply
+
 from .command_executor import CommandExecutor
 
 
@@ -12,6 +15,21 @@ class CommandProcessor:
         self.context = star_instance.context
         self.data_manager = star_instance.data_manager
         self.command_executor = CommandExecutor(self.context)
+
+    def _prepare_captured_message_for_forward(self, captured_msg):
+        """主动发送时剥离不适合跨会话重发的组件，如 Reply。"""
+        if not hasattr(captured_msg, "chain") or not captured_msg.chain:
+            return captured_msg
+
+        filtered_chain = [
+            component
+            for component in captured_msg.chain
+            if not isinstance(component, Reply)
+        ]
+        if len(filtered_chain) == len(captured_msg.chain):
+            return captured_msg
+
+        return MessageChain(chain=filtered_chain)
 
     def _resolve_wake_prefixes(self, event: AstrMessageEvent) -> List[str]:
         """解析当前会话可用的主框架唤醒前缀列表。"""
@@ -118,7 +136,10 @@ class CommandProcessor:
 
                             # 发送转发消息
                             await self.context.send_message(
-                                event.unified_msg_origin, captured_msg
+                                event.unified_msg_origin,
+                                self._prepare_captured_message_for_forward(
+                                    captured_msg
+                                ),
                             )
 
                             # 如果有多条消息，添加间隔
