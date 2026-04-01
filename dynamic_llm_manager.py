@@ -20,6 +20,39 @@ class DynamicLLMManager:
         self.command_processor = command_processor
         self.registered_functions = set()  # 记录已注册的函数名
 
+    def _get_active_function_names(self) -> set:
+        mappings = self.data_manager.list_mappings(enabled_only=True)
+        return {
+            mapping.get("llm_function")
+            for mapping in mappings.values()
+            if mapping.get("llm_function")
+        }
+
+    def cleanup_stale_functions(self, keep_functions: set = None):
+        """清理当前插件遗留但已不应存在的动态函数。"""
+        if keep_functions is None:
+            keep_functions = self._get_active_function_names()
+        tool_manager = self.context.provider_manager.llm_tools
+
+        stale_names = set()
+        for tool in list(tool_manager.func_list):
+            handler = getattr(tool, "handler", None)
+            if not callable(handler):
+                continue
+
+            module_name = getattr(handler, "__module__", "")
+            handler_name = getattr(handler, "__name__", "")
+            if module_name != __name__ or not handler_name.startswith("dynamic_"):
+                continue
+
+            if tool.name not in keep_functions:
+                stale_names.add(tool.name)
+
+        for func_name in stale_names:
+            tool_manager.remove_func(func_name)
+            self.registered_functions.discard(func_name)
+            logger.info(f"清理遗留动态LLM函数: {func_name}")
+
     def register_dynamic_functions(self):
         """注册所有动态LLM函数"""
         try:
@@ -28,6 +61,13 @@ class DynamicLLMManager:
                 return
 
             mappings = self.data_manager.list_mappings(enabled_only=True)
+            active_function_names = {
+                mapping.get("llm_function")
+                for mapping in mappings.values()
+                if mapping.get("llm_function")
+            }
+            self.cleanup_stale_functions(active_function_names)
+
             for command_name, mapping in mappings.items():
                 llm_function = mapping.get("llm_function")
                 description = mapping.get("description", "")
@@ -184,6 +224,8 @@ class DynamicLLMManager:
             for func_name in list(self.registered_functions):
                 self.unregister_function(func_name)
 
+            self.cleanup_stale_functions(set())
+
             # 重新注册所有函数
             logger.info(f"[dynamic_llm_manager] 重新注册所有函数")
             self.register_dynamic_functions()
@@ -201,3 +243,13 @@ class DynamicLLMManager:
     def get_registered_functions(self) -> List[str]:
         """获取已注册的函数列表"""
         return list(self.registered_functions)
+
+    def cleanup_all_functions(self):
+        """清理当前插件注册过的全部动态函数（用于插件卸载）。"""
+        try:
+            for func_name in list(self.registered_functions):
+                self.unregister_function(func_name)
+
+            self.cleanup_stale_functions(set())
+        except Exception as e:
+            logger.error(f"清理动态LLM函数失败: {e}")
